@@ -1,4 +1,6 @@
 # Para inicializar una ventana en python de QT5 comandos basicos
+import time
+
 from PyQt5.QtWidgets import QMainWindow, QApplication
 from PyQt5.uic import loadUi
 from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
@@ -18,6 +20,11 @@ class MyApp(QMainWindow):
         self.flag_graf = "0"
         self.flag_check_R = "0"
         self.flag_check_P = "0"
+        self.flag_check_Y = "0"
+        self.flag_check_LC1 = "0"
+        self.flag_check_LC2 = "0"
+        self.flag_check_LC3 = "0"
+        self.flag_check_LC4 = "0"
 
         # Ganancias PID
         self.Val_R_Kp = 0.0
@@ -63,9 +70,17 @@ class MyApp(QMainWindow):
         self.x1 = list(np.linspace(0, 100, 100))
         self.x2 = list(np.linspace(0, 100, 100))
         self.x3 = list(np.linspace(0, 100, 100))
+        self.x4 = list(np.linspace(0, 100, 100))
+        self.x5 = list(np.linspace(0, 100, 100))
+        self.x6 = list(np.linspace(0, 100, 100))
+        self.x7 = list(np.linspace(0, 100, 100))
         self.y1 = list(np.linspace(0, 0, 100))
         self.y2 = list(np.linspace(0, 0, 100))
         self.y3 = list(np.linspace(0, 0, 100))
+        self.y4 = list(np.linspace(0, 0, 100))
+        self.y5 = list(np.linspace(0, 0, 100))
+        self.y6 = list(np.linspace(0, 0, 100))
+        self.y7 = list(np.linspace(0, 0, 100))
 
         # Grafica
         self.Inicio.clicked.connect(self.iniciar_grafica)
@@ -78,6 +93,11 @@ class MyApp(QMainWindow):
         # Checkboxes
         self.R_Check.toggled.connect(self.check_toggle)
         self.P_Check.toggled.connect(self.check_toggle)
+        self.Y_Check.toggled.connect(self.check_toggle)
+        self.LC_Check_1.toggled.connect(self.check_toggle)
+        self.LC_Check_2.toggled.connect(self.check_toggle)
+        self.LC_Check_3.toggled.connect(self.check_toggle)
+        self.LC_Check_4.toggled.connect(self.check_toggle)
 
         self.read_ports()
 
@@ -143,19 +163,38 @@ class MyApp(QMainWindow):
     def check_toggle(self):
         if self.R_Check.isChecked():
             self.flag_check_R = "1"
-            print(self.flag_check_R)
-
         else:
             self.flag_check_R = "0"
-            print(self.flag_check_R)
 
         if self.P_Check.isChecked():
             self.flag_check_P = "1"
-            print(self.flag_check_P)
-
         else:
             self.flag_check_P = "0"
-            print(self.flag_check_P)
+
+        if self.Y_Check.isChecked():
+            self.flag_check_Y = "1"
+        else:
+            self.flag_check_Y = "0"
+
+        if self.LC_Check_1.isChecked():
+            self.flag_check_LC1 = "1"
+        else:
+            self.flag_check_LC1 = "0"
+
+        if self.LC_Check_2.isChecked():
+            self.flag_check_LC2 = "1"
+        else:
+            self.flag_check_LC2 = "0"
+
+        if self.LC_Check_3.isChecked():
+            self.flag_check_LC3 = "1"
+        else:
+            self.flag_check_LC3 = "0"
+
+        if self.LC_Check_4.isChecked():
+            self.flag_check_LC4 = "1"
+        else:
+            self.flag_check_LC4 = "0"
     def read_ports(self):
         self.baudrates = ['1200', '2400', '4800', '9600',
                           '19200', '38400', '115200']
@@ -185,42 +224,127 @@ class MyApp(QMainWindow):
 
         rx = self.serial.readLine()
         rx = str(rx, 'utf-8').strip()
+        print(rx)
 
         # Dividir los datos en una lista
         data_list = rx.split(',')
 
-        if len(data_list) != 3:
+        if len(data_list) != 7:
             # Asegúrate de que haya exactamente 3 valores
             return
 
         # Convertir los valores a números flotantes
-        x3, x2, x1 = map(float, data_list)
+        x1, x2, x3, x4, x5, x6, x7 = map(float, data_list)
 
-        #print(f"Valor 1: {x1}, Valor 2: {x2}, Valor 3: {x3}")
+        #print(f"Valor 1: {x1}, Valor 2: {x2}, Valor 3: {x3}, Valor 4: {x4}, Valor 5: {x5}, Valor 6: {x6}, Valor 7: {x7}")
 
         if self.flag_graf == "1":
+            self.y1 = self.y1[1:]
+            self.y1.append(x1)  # Graficar el 1 valor
             self.y2 = self.y2[1:]
-            self.y2.append(x2)  # Graficar el primer valor
+            self.y2.append(x2)  # Graficar el 2 valor
             self.y3 = self.y3[1:]
-            self.y3.append(x3)  # Graficar el segundo valor
+            self.y3.append(x3)  # Graficar el 3 valor
+            self.y4 = self.y4[1:]
+            self.y4.append(x4)  # Graficar el 4 valor
+            self.y5 = self.y5[1:]
+            self.y5.append(x5)  # Graficar el 4 valor
+            self.y6 = self.y6[1:]
+            self.y6.append(x6)  # Graficar el 4 valor
+            self.y7 = self.y7[1:]
+            self.y7.append(x7)  # Graficar el 4 valor
 
-            if self.flag_check_R == "1" and self.flag_check_P == "0":
+            if self.flag_check_R == "1" and self.flag_check_P == "0" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
                 self.plt.clear()
-                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
 
-            if self.flag_check_P == "1" and self.flag_check_R == "0":
+            if self.flag_check_R == "0" and self.flag_check_P == "1" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
                 self.plt.clear()
-                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#00da37', width=2), name="Valor 2")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
                 # self.plt.addLegend()
 
-            if self.flag_check_P == "1" and self.flag_check_R == "1":
+            if self.flag_check_R == "0" and self.flag_check_P == "0" and self.flag_check_Y == "1" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
                 self.plt.clear()
-                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
-                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#00da37', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+                # self.plt.addLegend()
 
-            if self.flag_check_R == "0" and self.flag_check_P == "0":
+            if self.flag_check_R == "0" and self.flag_check_P == "0" and self.flag_check_Y == "0" and self.flag_check_LC1 == "1" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
                 self.plt.clear()
+                self.plt.plot(self.x4, self.y4, pen=pg.mkPen('#28A70E', width=2), name="Valor 4")
+                # self.plt.addLegend()
 
+            if self.flag_check_R == "0" and self.flag_check_P == "0" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "1" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x5, self.y5, pen=pg.mkPen('#109772', width=2), name="Valor 5")
+                # self.plt.addLegend()
+
+            if self.flag_check_R == "0" and self.flag_check_P == "0" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "1" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x6, self.y6, pen=pg.mkPen('#106697', width=2), name="Valor 6")
+                # self.plt.addLegend()
+
+            if self.flag_check_R == "0" and self.flag_check_P == "0" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "1":
+                self.plt.clear()
+                self.plt.plot(self.x7, self.y7, pen=pg.mkPen('#106697', width=2), name="Valor 7")
+                # self.plt.addLegend()
+
+            if self.flag_check_R == "1" and self.flag_check_P == "1" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+
+            if self.flag_check_R == "1" and self.flag_check_P == "0" and self.flag_check_Y == "1" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+
+            if self.flag_check_R == "1" and self.flag_check_P == "1" and self.flag_check_Y == "1" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+
+            if self.flag_check_R == "0" and self.flag_check_P == "1" and self.flag_check_Y == "1" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+
+            if self.flag_check_R == "1" and self.flag_check_P == "1" and self.flag_check_Y == "1" and self.flag_check_LC1 == "1" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+                self.plt.plot(self.x4, self.y4, pen=pg.mkPen('#28A70E', width=2), name="Valor 4")
+
+            if self.flag_check_R == "1" and self.flag_check_P == "1" and self.flag_check_Y == "1" and self.flag_check_LC1 == "1" and self.flag_check_LC2 == "1" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+                self.plt.plot(self.x4, self.y4, pen=pg.mkPen('#28A70E', width=2), name="Valor 4")
+                self.plt.plot(self.x5, self.y5, pen=pg.mkPen('#109772', width=2), name="Valor 5")
+
+            if self.flag_check_R == "1" and self.flag_check_P == "1" and self.flag_check_Y == "1" and self.flag_check_LC1 == "1" and self.flag_check_LC2 == "1" and self.flag_check_LC3 == "1" and self.flag_check_LC4 == "0":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+                self.plt.plot(self.x4, self.y4, pen=pg.mkPen('#28A70E', width=2), name="Valor 4")
+                self.plt.plot(self.x5, self.y5, pen=pg.mkPen('#109772', width=2), name="Valor 5")
+                self.plt.plot(self.x6, self.y6, pen=pg.mkPen('#106697', width=2), name="Valor 6")
+
+            if self.flag_check_R == "1" and self.flag_check_P == "1" and self.flag_check_Y == "1" and self.flag_check_LC1 == "1" and self.flag_check_LC2 == "1" and self.flag_check_LC3 == "1" and self.flag_check_LC4 == "1":
+                self.plt.clear()
+                self.plt.plot(self.x1, self.y1, pen=pg.mkPen('#da0037', width=2), name="Valor 1")
+                self.plt.plot(self.x2, self.y2, pen=pg.mkPen('#FF5733', width=2), name="Valor 2")
+                self.plt.plot(self.x3, self.y3, pen=pg.mkPen('#BC970B', width=2), name="Valor 3")
+                self.plt.plot(self.x4, self.y4, pen=pg.mkPen('#28A70E', width=2), name="Valor 4")
+                self.plt.plot(self.x5, self.y5, pen=pg.mkPen('#109772', width=2), name="Valor 5")
+                self.plt.plot(self.x6, self.y6, pen=pg.mkPen('#106697', width=2), name="Valor 6")
+                self.plt.plot(self.x7, self.y7, pen=pg.mkPen('#106697', width=2), name="Valor 7")
+
+            if self.flag_check_R == "0" and self.flag_check_P == "0" and self.flag_check_Y == "0" and self.flag_check_LC1 == "0" and self.flag_check_LC2 == "0" and self.flag_check_LC3 == "0" and self.flag_check_LC4 == "0":
+                self.plt.clear()
 
 
         self.PWM_motores()
