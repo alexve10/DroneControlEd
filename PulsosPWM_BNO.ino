@@ -20,7 +20,8 @@ float acc_x_input, acc_y_input, acc_z_input, mag_x_input, mag_y_input, mag_z_inp
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  DDRB |= B00010000; //Configure digital port 12 and 13 as output
+  DDRB |= B00011110; //Configure digital port 12 and 11 as output
+  
   //pinMode(12,OUTPUT)
 
 }
@@ -74,19 +75,20 @@ void PWM_Signal(){
   ESC_Value = bound(ESC_Value, 1000, 2000);
   esc_timer = micros()+ESC_Value;
   // put your main code here, to run repeatedly:
-  PORTB |= B00010000; //Set P12 to HIGH
+  PORTB |= B00011110; //Set P12 and 11 to HIGH
   while(micros() < esc_timer); //wait 1500s  
-  PORTB &= B11101111; //Set P12 to low
+  PORTB &= B11100001; //Set P12 and 11 to low
 }
 
 void showData() {
-  Serial.print(ESC_Value);
-  Serial.print(" ");
   Serial.print(gyro_roll_input,4);
   Serial.print(" ");
   Serial.print(gyro_pitch_input,4);
   Serial.print(" ");
-  Serial.println(gyro_yaw_input,4);
+  Serial.print(gyro_yaw_input,4);
+  Serial.print(" ");
+  Serial.println(ESC_Value);
+  
 }
 
 void LeerBNO(){
