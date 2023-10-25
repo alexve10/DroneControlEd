@@ -22,17 +22,15 @@ void setup() {
 
 void loop() {
   // Leer los valores de roll, pitch y yaw en formato de 16 bits (little-endian)
-  float yaw = readRegister16(BNO055_EUL_Heading_LSB);
-  float pitch = readRegister16(BNO055_EUL_Roll_LSB);
-  float roll = readRegister16(BNO055_EUL_Pitch_LSB);
-  
-  Serial.print(roll / 16);
-  Serial.print(",");
-  Serial.print(pitch / 16);
-  Serial.print(",");
-  Serial.println(yaw / 16);
+  float yaw = readRegister16(BNO055_EUL_Heading_LSB) / 16.0;
+  float pitch = readRegister16(BNO055_EUL_Roll_LSB) / 16.0;
+  float roll = readRegister16(BNO055_EUL_Pitch_LSB) / 16.0;
 
-  delay(100);
+  Serial.print(roll);
+  Serial.print(",");
+  Serial.print(pitch);
+  Serial.print(",");
+  Serial.println(yaw);
 }
 
 int16_t readRegister16(uint8_t reg) {
