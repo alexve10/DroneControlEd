@@ -1,15 +1,15 @@
 #include <Wire.h>  //Include the Wire.h library so we can comunicate with the gyro
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
-unsigned long esc_timer;
-unsigned long ESC_Value=1000;
+unsigned long esc_timer1, esc_timer2, esc_timer3, esc_timer4;
+unsigned long ESC_Value1=1000, ESC_Value2=1000, ESC_Value3=1000, ESC_Value4=1000;
 
 // Serial Comunication
 const byte numChars = 32;
 char receivedChars[numChars];
 char tempChars[numChars];  // temporary array for use when parsing
 boolean newData = false;
-int delay1=1000;
+int delay1=1000, delay2 = 1000, delay3 = 1000, delay4 = 1000;
 byte modo;
 
 //Definir el IMU
@@ -20,7 +20,8 @@ float acc_x_input, acc_y_input, acc_z_input, mag_x_input, mag_y_input, mag_z_inp
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  DDRB |= B00011110; //Configure digital port 12 and 11 as output
+  DDRD |= B11110000;  //Configure digital port 7,6,5 and 4 as output                                                                  //Configure digital poort 4, 5, 6 and 7 as output.
+  //DDRB |= B00011110; //Configure digital port 12 and 11 as output
   
   //pinMode(12,OUTPUT)
 
@@ -31,7 +32,11 @@ void loop() {
   if (newData == true) {
     strcpy(tempChars, receivedChars);  // Copia para proteger la data original ya que strtok() reemplaza las comas con  "\0"
     Divir_datos();
-    ESC_Value = delay1;
+    ESC_Value1 = delay1;
+    ESC_Value2 = delay2;
+    ESC_Value3 = delay3;
+    ESC_Value4 = delay4;
+
     newData = false;
   }
 
@@ -68,16 +73,36 @@ void Divir_datos() {  // split the data into its parts
   char* strtokIndx;  // this is used by strtok() as an index
   strtokIndx = strtok(tempChars, ",");  // get the first part - p1
   delay1 = atoi(strtokIndx);
+  strtokIndx = strtok(NULL, ",");  // this continues where the previous call left off
+  delay2 = atoi(strtokIndx);
+  strtokIndx = strtok(NULL, ",");  // this continues where the previous call left off
+  delay3 = atoi(strtokIndx);
+  strtokIndx = strtok(NULL, ",");  // this continues where the previous call left off
+  delay4 = atoi(strtokIndx);
+
 }
 
 
 void PWM_Signal(){
-  ESC_Value = bound(ESC_Value, 1000, 2000);
-  esc_timer = micros()+ESC_Value;
-  // put your main code here, to run repeatedly:
-  PORTB |= B00011110; //Set P12 and 11 to HIGH
-  while(micros() < esc_timer); //wait 1500s  
-  PORTB &= B11100001; //Set P12 and 11 to low
+  ESC_Value1 = bound(ESC_Value1, 1000, 2000);
+  ESC_Value2 = bound(ESC_Value2, 1000, 2000);
+  ESC_Value3 = bound(ESC_Value3, 1000, 2000);
+  ESC_Value4 = bound(ESC_Value4, 1000, 2000);
+
+  esc_timer1 = micros()+ESC_Value1;
+  esc_timer2 = micros()+ESC_Value2;
+  esc_timer3 = micros()+ESC_Value3;
+  esc_timer4 = micros()+ESC_Value4;
+
+  PORTD |= B11110000; //Set P12, P11, P10 and P9 to HIGH
+
+  while(PORTD >= 16){
+    if(micros() >= esc_timer1)PORTD &= B11101111; //Set 4 to low
+    if(micros() >= esc_timer2)PORTD &= B11011111; //Set 5 to low
+    if(micros() >= esc_timer3)PORTD &= B10111111; //Set 6 to low
+    if(micros() >= esc_timer4)PORTD &= B01111111; //Set 7 to low
+
+  }
 }
 
 void showData() {
@@ -87,7 +112,13 @@ void showData() {
   Serial.print(" ");
   Serial.print(gyro_yaw_input,4);
   Serial.print(" ");
-  Serial.println(ESC_Value);
+  Serial.print(ESC_Value1);
+  Serial.print(" ");
+  Serial.print(ESC_Value2);
+  Serial.print(" ");
+  Serial.print(ESC_Value3);
+  Serial.print(" ");
+  Serial.println(ESC_Value4);
   
 }
 
