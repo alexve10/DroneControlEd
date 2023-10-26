@@ -1,3 +1,7 @@
+////////////////////////////////////////////////////////////////////////////////////
+// BNO055
+////////////////////////////////////////////////////////////////////////////////////
+
 #include <Wire.h>
 #define BNO055_ADDRESS 0x28
 
@@ -8,54 +12,189 @@
 #define BNO055_EUL_Pitch_LSB 0x1E
 #define BNO055_EUL_Pitch_MSB 0x1F
 
+////////////////////////////////////////////////////////////////////////////////////
+// DEFINIR PINES
+////////////////////////////////////////////////////////////////////////////////////
 
-unsigned long esc_timer1, esc_timer2, esc_timer3, esc_timer4;
-unsigned long ESC_Value1=1000, ESC_Value2=1000, ESC_Value3=1000, ESC_Value4=1000;
+#define MAX_SIGNAL 2000
+#define MIN_SIGNAL 1000
+#define ESC_PIN1 12
+#define ESC_PIN2 9
+#define ESC_PIN3 10
+#define ESC_PIN4 11
 
 // Serial Comunication
 const byte numChars = 32;
 char receivedChars[numChars];
 char tempChars[numChars];  // temporary array for use when parsing
 boolean newData = false;
-int delay1=1000, delay2 = 1000, delay3 = 1000, delay4 = 1000;
+int delay1 = 1000;
 byte modo;
 
-float acc_x_input, acc_y_input, acc_z_input, mag_x_input, mag_y_input, mag_z_input, gyro_roll_input, gyro_pitch_input, gyro_yaw_input;
+////////////////////////////////////////////////////////////////////////////////////
+// Declaring Variables
+////////////////////////////////////////////////////////////////////////////////////
+int motorFRSpeed, motorFLSpeed, motorRRSpeed, motorRLSpeed;
+int throttle, battery_voltage;
+unsigned long loop_timer;
+float gyro_pitch, gyro_roll, gyro_yaw;
+float gyro_roll_cal, gyro_pitch_cal, gyro_yaw_cal;
 
+float pid_p_pitch, pid_i_pitch, pid_d_pitch;
+float pid_error_temp;
+float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_last_roll_d_error;
+float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
+float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
+float acc_x_input, acc_y_input, acc_z_input, mag_x_input, mag_y_input, mag_z_input;
+unsigned long esc_timer1, esc_timer2, esc_timer3, esc_timer4;
+unsigned long ESC_Value1 = 1000, ESC_Value2 = 1000, ESC_Value3 = 1000, ESC_Value4 = 1000;
+
+////////////////////////////////////////////////////////////////////////////////////
+// PID GAIN AND LIMIT SETTINGS
+////////////////////////////////////////////////////////////////////////////////////
+
+float pid_p_gain_roll = 1.5;   //Gain setting for the roll P-Controller
+float pid_i_gain_roll = 0.04;  //Gain setting for the roll I-Controller
+float pid_d_gain_roll = 15.0;  //Gain setting for the roll D-Controller
+
+int pid_max_roll = 400;  //Maximum output of the PID-Controller (+/-)
+
+float pid_p_gain_pitch = pid_p_gain_roll;  //Gain setting for the pitch P-Controller
+float pid_i_gain_pitch = pid_i_gain_roll;  //Gain setting for the pitch I-Controller
+float pid_d_gain_pitch = pid_d_gain_roll;  //Gain setting for the pitch D-Controller
+
+int pid_max_pitch = 400;  //Maximum output of the PID-Controller (+/-)
+
+float pid_p_gain_yaw = 4.0;   //Gain setting for the yaw P-Controller
+float pid_i_gain_yaw = 0.03;  //Gain setting for the yaw I-Controller
+float pid_d_gain_yaw = 0.0;   //Gain setting for the yaw D-Controller
+
+int pid_max_yaw = 400;  //Maximum output of the PID-Controller (+/-)
+
+////////////////////////////////////////////////////////////////////////////////////
+// SETUP ROUTINE
+////////////////////////////////////////////////////////////////////////////////////
 
 void setup() {
   Serial.begin(9600);
   Wire.begin();
-  DDRD |= B11110000;  //Configure digital port 7,6,5 and 4 as output                                                                  //Configure digital poort 4, 5, 6 and 7 as output.
-  //DDRB |= B00011110; //Configure digital port 12 and 11 as output
-  
-    // Configurar el sensor BNO055
+  delay(1000);
+
+  // Configurar el sensor BNO055
   Wire.beginTransmission(BNO055_ADDRESS);
   Wire.write(0x3D);  // Registro de control
   Wire.write(0x0C);  // Poner el sensor en modo IMU
   Wire.write(0x3B);  // Regitsro de Unidades
   Wire.endTransmission();
 
+  DDRD |= B11110000;  //Configure digital port 7,6,5 and 4 as output                                                                  //Configure digital poort 4, 5, 6 and 7 as output.
+
+  delay(1000);
 }
 
 void loop() {
+
+
   readSerial();
   if (newData == true) {
     strcpy(tempChars, receivedChars);  // Copia para proteger la data original ya que strtok() reemplaza las comas con  "\0"
     Divir_datos();
-    ESC_Value1 = delay1;
-    ESC_Value2 = delay2;
-    ESC_Value3 = delay3;
-    ESC_Value4 = delay4;
-
+    throttle = delay1;
+    if (throttle <= 1090) {
+      modo = 0;
+    } else {
+      modo = 1;
+    }
     newData = false;
   }
 
-  PWM_Signal();
   LeerBNO();
-  showData();
-  
+
+  if (modo == 1) {
+    calculate_pid();
+    if (abs(gyro_roll_input) <= 4.0) {
+      //pid_output_roll = 0;
+      pid_i_mem_roll = pid_i_mem_roll * 0.8;
+    }
+    if (abs(gyro_pitch_input) <= 4.0) {
+      //pid_output_pitch = 0;
+      pid_i_mem_pitch = pid_i_mem_pitch * 0.8;
+    }
+
+    motorFLSpeed = throttle - pid_output_pitch + pid_output_roll;  //- pid_output_roll - pid_output_yaw;  //Calculate the pulse for esc 1 (front-right - CCW)
+    motorFRSpeed = throttle - pid_output_pitch - pid_output_roll;  // + pid_output_roll + pid_output_yaw;  //Calculate the pulse for esc 2 (rear-right - CW)
+    motorRRSpeed = throttle + pid_output_pitch - pid_output_roll;  // + pid_output_roll - pid_output_yaw;  //Calculate the pulse for esc 3 (rear-left - CCW)
+    motorRLSpeed = throttle + pid_output_pitch + pid_output_roll;  // - pid_output_roll + pid_output_yaw;
+
+    motorFLSpeed = bound(motorFLSpeed, 1100, 2000);
+    motorFRSpeed = bound(motorFRSpeed, 1100, 2000);
+    motorRRSpeed = bound(motorRRSpeed, 1100, 2000);
+    motorRLSpeed = bound(motorRLSpeed, 1100, 2000);
+    /*motorFrontLeft.writeMicroseconds(motorFLSpeed);
+    motorRearRight.writeMicroseconds(motorRRSpeed);
+    motorRearLeft.writeMicroseconds(motorRLSpeed);
+    motorFrontRight.writeMicroseconds(motorFRSpeed);*/
+    PWM_Signal();
+    showData();
+  }
+
+  else {
+    motorFLSpeed = 1000;
+    motorFRSpeed = 1000;
+    motorRLSpeed = 1000;
+    motorRRSpeed = 1000;
+    pid_i_mem_pitch = 0;
+    pid_i_mem_roll = 0;
+    pid_i_mem_yaw = 0;
+    PWM_Signal();
+
+    showData();
+  }
 }
+
+
+void calculate_pid() {
+  //Roll calculations
+  pid_error_temp = gyro_roll_input - pid_roll_setpoint;
+  pid_i_mem_roll += pid_i_gain_roll * pid_error_temp;
+  if (pid_i_mem_roll > pid_max_roll) pid_i_mem_roll = pid_max_roll;
+  else if (pid_i_mem_roll < pid_max_roll * -1) pid_i_mem_roll = pid_max_roll * -1;
+
+  pid_output_roll = pid_p_gain_roll * pid_error_temp + pid_i_mem_roll + pid_d_gain_roll * (pid_error_temp - pid_last_roll_d_error);
+  if (pid_output_roll > pid_max_roll) pid_output_roll = pid_max_roll;
+  else if (pid_output_roll < pid_max_roll * -1) pid_output_roll = pid_max_roll * -1;
+
+  pid_last_roll_d_error = pid_error_temp;
+
+  //Pitch calculations
+  pid_error_temp = gyro_pitch_input - pid_pitch_setpoint;
+  pid_i_mem_pitch += pid_i_gain_pitch * pid_error_temp;
+  if (pid_i_mem_pitch > pid_max_pitch) pid_i_mem_pitch = pid_max_pitch;
+  else if (pid_i_mem_pitch < pid_max_pitch * -1) pid_i_mem_pitch = pid_max_pitch * -1;
+
+  pid_p_pitch = pid_p_gain_pitch * pid_error_temp;
+  pid_i_pitch = pid_i_mem_pitch;
+  pid_d_pitch = pid_d_gain_pitch * (pid_error_temp - pid_last_pitch_d_error);
+
+  pid_output_pitch = pid_p_pitch + pid_i_pitch + pid_d_pitch;
+  if (pid_output_pitch > pid_max_pitch) pid_output_pitch = pid_max_pitch;
+  else if (pid_output_pitch < pid_max_pitch * -1) pid_output_pitch = pid_max_pitch * -1;
+
+  pid_last_pitch_d_error = pid_error_temp;
+
+  //Yaw calculations
+  pid_error_temp = gyro_yaw_input - pid_yaw_setpoint;
+  pid_i_mem_yaw += pid_i_gain_yaw * pid_error_temp;
+  if (pid_i_mem_yaw > pid_max_yaw) pid_i_mem_yaw = pid_max_yaw;
+  else if (pid_i_mem_yaw < pid_max_yaw * -1) pid_i_mem_yaw = pid_max_yaw * -1;
+
+  pid_output_yaw = pid_p_gain_yaw * pid_error_temp + pid_i_mem_yaw + pid_d_gain_yaw * (pid_error_temp - pid_last_yaw_d_error);
+  if (pid_output_yaw > pid_max_yaw) pid_output_yaw = pid_max_yaw;
+  else if (pid_output_yaw < pid_max_yaw * -1) pid_output_yaw = pid_max_yaw * -1;
+
+  pid_last_yaw_d_error = pid_error_temp;
+}
+
 
 void readSerial() {
   static byte ndx = 0;
@@ -81,59 +220,54 @@ void readSerial() {
 
 
 void Divir_datos() {  // split the data into its parts
+
   char* strtokIndx;  // this is used by strtok() as an index
+
   strtokIndx = strtok(tempChars, ",");  // get the first part - p1
   delay1 = atoi(strtokIndx);
-  strtokIndx = strtok(NULL, ",");  // this continues where the previous call left off
-  delay2 = atoi(strtokIndx);
-  strtokIndx = strtok(NULL, ",");  // this continues where the previous call left off
-  delay3 = atoi(strtokIndx);
-  strtokIndx = strtok(NULL, ",");  // this continues where the previous call left off
-  delay4 = atoi(strtokIndx);
-
+  delay1 = bound(delay1, 1000, 2000);
 }
 
 
-void PWM_Signal(){
-  ESC_Value1 = bound(ESC_Value1, 1000, 2000);
-  ESC_Value2 = bound(ESC_Value2, 1000, 2000);
-  ESC_Value3 = bound(ESC_Value3, 1000, 2000);
-  ESC_Value4 = bound(ESC_Value4, 1000, 2000);
+void PWM_Signal() {
 
-  esc_timer1 = micros()+ESC_Value1;
-  esc_timer2 = micros()+ESC_Value2;
-  esc_timer3 = micros()+ESC_Value3;
-  esc_timer4 = micros()+ESC_Value4;
+  esc_timer1 = micros() + motorFLSpeed;
+  esc_timer2 = micros() + motorFRSpeed;
+  esc_timer3 = micros() + motorRRSpeed;
+  esc_timer4 = micros() + motorRLSpeed;
 
-  PORTD |= B11110000; //Set P12, P11, P10 and P9 to HIGH
+  PORTD |= B11110000;  //Set P12, P11, P10 and P9 to HIGH
 
-  while(PORTD >= 16){
-    if(micros() >= esc_timer1)PORTD &= B11101111; //Set 4 to low
-    if(micros() >= esc_timer2)PORTD &= B11011111; //Set 5 to low
-    if(micros() >= esc_timer3)PORTD &= B10111111; //Set 6 to low
-    if(micros() >= esc_timer4)PORTD &= B01111111; //Set 7 to low
-
+  while (PORTD >= 16) {
+    if (micros() >= esc_timer1) PORTD &= B11101111;  //Set 4 to low
+    if (micros() >= esc_timer2) PORTD &= B11011111;  //Set 5 to low
+    if (micros() >= esc_timer3) PORTD &= B10111111;  //Set 6 to low
+    if (micros() >= esc_timer4) PORTD &= B01111111;  //Set 7 to low
   }
 }
 
 void showData() {
-  Serial.print(gyro_roll_input,4);
-  Serial.print(" ");
-  Serial.print(gyro_pitch_input,4);
-  Serial.print(" ");
-  Serial.print(gyro_yaw_input,4);
-  Serial.print(" ");
-  Serial.print(ESC_Value1);
-  Serial.print(" ");
-  Serial.print(ESC_Value2);
-  Serial.print(" ");
-  Serial.print(ESC_Value3);
-  Serial.print(" ");
-  Serial.println(ESC_Value4);
-  
+  //float SPEED1 = (delay1 - 1000) / 10;
+  //Serial.print("Motor speed 1: ");
+  //Serial.print(throttle);
+  //Serial.print("%");
+  //Serial.print(" ");
+  Serial.print(gyro_roll_input);
+  Serial.print(",");
+  Serial.print(gyro_pitch_input);
+  Serial.print(",");
+  Serial.print(gyro_yaw_input);
+  Serial.print(",");
+  Serial.print(motorFLSpeed);
+  Serial.print(",");
+  Serial.print(motorFRSpeed);
+  Serial.print(",");
+  Serial.print(motorRRSpeed);
+  Serial.print(",");
+  Serial.println(motorRLSpeed);
 }
 
-void LeerBNO(){
+void LeerBNO() {
  // Leer los valores de roll, pitch y yaw en formato de 16 bits (little-endian)
   gyro_yaw_input = readRegister16(BNO055_EUL_Heading_LSB) / 16.0;
   gyro_pitch_input = readRegister16(BNO055_EUL_Roll_LSB) / 16.0;
@@ -150,8 +284,21 @@ int16_t readRegister16(uint8_t reg) {
   return value;
 }
 
+
 float bound(float x, float x_min, float x_max) {
   if (x < x_min) { x = x_min; }
   if (x > x_max) { x = x_max; }
   return x;
+}
+
+float percentage(float x) {
+  float percentage = (x - 1000) / 10;
+  return percentage;
+}
+float limit_PWM(float output) {
+  if (output > 1600) output = 1600;
+  else if (output < 1100) {
+    output = 1100;
+  }
+  return output;
 }
