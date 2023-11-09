@@ -18,17 +18,14 @@
 
 #define MAX_SIGNAL 2000
 #define MIN_SIGNAL 1000
-#define ESC_PIN1 12
-#define ESC_PIN2 9
-#define ESC_PIN3 10
-#define ESC_PIN4 11
 
 // Serial Comunication
-const byte numChars = 32;
+const byte numChars = 64;
 char receivedChars[numChars];
 char tempChars[numChars];  // temporary array for use when parsing
 boolean newData = false;
-int delay1 = 1000;
+int flag_datos;
+
 byte modo;
 
 ////////////////////////////////////////////////////////////////////////////////////
@@ -37,8 +34,6 @@ byte modo;
 int motorFRSpeed, motorFLSpeed, motorRRSpeed, motorRLSpeed;
 int throttle, battery_voltage;
 unsigned long loop_timer;
-float gyro_pitch, gyro_roll, gyro_yaw;
-float gyro_roll_cal, gyro_pitch_cal, gyro_yaw_cal;
 
 float pid_p_pitch, pid_i_pitch, pid_d_pitch;
 float pid_error_temp;
@@ -46,6 +41,7 @@ float pid_i_mem_roll, pid_roll_setpoint, gyro_roll_input, pid_output_roll, pid_l
 float pid_i_mem_pitch, pid_pitch_setpoint, gyro_pitch_input, pid_output_pitch, pid_last_pitch_d_error;
 float pid_i_mem_yaw, pid_yaw_setpoint, gyro_yaw_input, pid_output_yaw, pid_last_yaw_d_error;
 float acc_x_input, acc_y_input, acc_z_input, mag_x_input, mag_y_input, mag_z_input;
+float desfase_roll = 0, desfase_pitch= 0, desfase_yaw= 0;
 unsigned long esc_timer1, esc_timer2, esc_timer3, esc_timer4;
 unsigned long ESC_Value1 = 1000, ESC_Value2 = 1000, ESC_Value3 = 1000, ESC_Value4 = 1000;
 
@@ -53,9 +49,9 @@ unsigned long ESC_Value1 = 1000, ESC_Value2 = 1000, ESC_Value3 = 1000, ESC_Value
 // PID GAIN AND LIMIT SETTINGS
 ////////////////////////////////////////////////////////////////////////////////////
 
-float pid_p_gain_roll = 1.5;   //Gain setting for the roll P-Controller
-float pid_i_gain_roll = 0.04;  //Gain setting for the roll I-Controller
-float pid_d_gain_roll = 15.0;  //Gain setting for the roll D-Controller
+float pid_p_gain_roll = 3.0;   //Gain setting for the roll P-Controller
+float pid_i_gain_roll = 0.05;  //Gain setting for the roll I-Controller
+float pid_d_gain_roll = 30.0;  //Gain setting for the roll D-Controller
 
 int pid_max_roll = 400;  //Maximum output of the PID-Controller (+/-)
 
@@ -70,6 +66,10 @@ float pid_i_gain_yaw = 0.03;  //Gain setting for the yaw I-Controller
 float pid_d_gain_yaw = 0.0;   //Gain setting for the yaw D-Controller
 
 int pid_max_yaw = 400;  //Maximum output of the PID-Controller (+/-)
+
+//
+
+String datos;
 
 ////////////////////////////////////////////////////////////////////////////////////
 // SETUP ROUTINE
@@ -89,17 +89,18 @@ void setup() {
 
   DDRD |= B11110000;  //Configure digital port 7,6,5 and 4 as output                                                                  //Configure digital poort 4, 5, 6 and 7 as output.
 
+  LeerBNO();
+  pid_roll_setpoint = gyro_roll_input;
+  pid_pitch_setpoint = gyro_pitch_input;
   delay(1000);
 }
 
 void loop() {
-
-
   readSerial();
   if (newData == true) {
     strcpy(tempChars, receivedChars);  // Copia para proteger la data original ya que strtok() reemplaza las comas con  "\0"
     Divir_datos();
-    throttle = delay1;
+
     if (throttle <= 1090) {
       modo = 0;
     } else {
@@ -112,30 +113,32 @@ void loop() {
 
   if (modo == 1) {
     calculate_pid();
-    if (abs(gyro_roll_input) <= 4.0) {
+    if (abs(pid_roll_setpoint - gyro_roll_input) <= 3.0) {
       //pid_output_roll = 0;
       pid_i_mem_roll = pid_i_mem_roll * 0.8;
     }
-    if (abs(gyro_pitch_input) <= 4.0) {
+    if (abs(pid_pitch_setpoint - gyro_pitch_input) <= 3.0) {
       //pid_output_pitch = 0;
       pid_i_mem_pitch = pid_i_mem_pitch * 0.8;
     }
 
+    if (abs(pid_yaw_setpoint - gyro_yaw_input) <= 3.0) {
+      pid_i_mem_yaw = pid_i_mem_yaw * 0.8;
+    }
+    
     motorFLSpeed = throttle - pid_output_pitch + pid_output_roll;  //- pid_output_roll - pid_output_yaw;  //Calculate the pulse for esc 1 (front-right - CCW)
     motorFRSpeed = throttle - pid_output_pitch - pid_output_roll;  // + pid_output_roll + pid_output_yaw;  //Calculate the pulse for esc 2 (rear-right - CW)
     motorRRSpeed = throttle + pid_output_pitch - pid_output_roll;  // + pid_output_roll - pid_output_yaw;  //Calculate the pulse for esc 3 (rear-left - CCW)
     motorRLSpeed = throttle + pid_output_pitch + pid_output_roll;  // - pid_output_roll + pid_output_yaw;
 
-    motorFLSpeed = bound(motorFLSpeed, 1100, 2000);
-    motorFRSpeed = bound(motorFRSpeed, 1100, 2000);
-    motorRRSpeed = bound(motorRRSpeed, 1100, 2000);
-    motorRLSpeed = bound(motorRLSpeed, 1100, 2000);
-    /*motorFrontLeft.writeMicroseconds(motorFLSpeed);
-    motorRearRight.writeMicroseconds(motorRRSpeed);
-    motorRearLeft.writeMicroseconds(motorRLSpeed);
-    motorFrontRight.writeMicroseconds(motorFRSpeed);*/
+    motorFLSpeed = bound(motorFLSpeed, 1100, 1700);
+    motorFRSpeed = bound(motorFRSpeed, 1100, 1700);
+    motorRRSpeed = bound(motorRRSpeed, 1100, 1700);
+    motorRLSpeed = bound(motorRLSpeed, 1100, 1700);
+
     PWM_Signal();
     showData();
+
   }
 
   else {
@@ -220,12 +223,54 @@ void readSerial() {
 
 
 void Divir_datos() {  // split the data into its parts
-
   char* strtokIndx;  // this is used by strtok() as an index
-
   strtokIndx = strtok(tempChars, ",");  // get the first part - p1
-  delay1 = atoi(strtokIndx);
-  delay1 = bound(delay1, 1000, 2000);
+  flag_datos = atoi(strtokIndx);
+
+  if(flag_datos == 1){
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    throttle = atoi(strtokIndx);
+    throttle = bound(throttle, 1000, 2000);
+  }
+
+  else if (flag_datos == 2) {
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_p_gain_roll = atof(strtokIndx);
+    pid_p_gain_roll = bound(pid_p_gain_roll,0,100);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_i_gain_roll = atof(strtokIndx);
+    pid_i_gain_roll = bound(pid_i_gain_roll,0,10);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_d_gain_roll = atof(strtokIndx);
+    pid_d_gain_roll = bound(pid_d_gain_roll,0,100);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_p_gain_pitch = atof(strtokIndx);
+    pid_p_gain_pitch = bound(pid_p_gain_pitch,0,100);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_i_gain_pitch = atof(strtokIndx);
+    pid_i_gain_pitch = bound(pid_i_gain_pitch,0,10);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_d_gain_pitch = atof(strtokIndx);
+    pid_d_gain_pitch = bound(pid_d_gain_pitch,0,100);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_p_gain_yaw = atof(strtokIndx);
+    pid_p_gain_yaw = bound(pid_p_gain_yaw,0,100);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_i_gain_yaw = atof(strtokIndx);
+    pid_i_gain_yaw = bound(pid_i_gain_yaw,0,10);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_d_gain_yaw = atof(strtokIndx);
+    pid_d_gain_yaw = bound(pid_d_gain_yaw,0,100);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_roll_setpoint = atof(strtokIndx);
+    pid_roll_setpoint = bound(pid_roll_setpoint,-40,40);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_pitch_setpoint = atof(strtokIndx);
+    pid_pitch_setpoint = bound(pid_pitch_setpoint,-40,40);
+    strtokIndx = strtok(NULL, ",");  // get the first part - p1
+    pid_yaw_setpoint = atof(strtokIndx);
+    pid_yaw_setpoint = bound(pid_yaw_setpoint,-360,360);
+  }
 }
 
 
@@ -247,11 +292,6 @@ void PWM_Signal() {
 }
 
 void showData() {
-  //float SPEED1 = (delay1 - 1000) / 10;
-  //Serial.print("Motor speed 1: ");
-  //Serial.print(throttle);
-  //Serial.print("%");
-  //Serial.print(" ");
   Serial.print(gyro_roll_input);
   Serial.print(",");
   Serial.print(gyro_pitch_input);
@@ -265,14 +305,19 @@ void showData() {
   Serial.print(motorRRSpeed);
   Serial.print(",");
   Serial.println(motorRLSpeed);
+  /*Serial.print(",");
+  Serial.print(pid_roll_setpoint);
+  Serial.print(",");
+  Serial.println(pid_pitch_setpoint);*/
 }
 
 void LeerBNO() {
- // Leer los valores de roll, pitch y yaw en formato de 16 bits (little-endian)
+  // Leer los valores de roll, pitch y yaw en formato de 16 bits (little-endian)
   gyro_yaw_input = readRegister16(BNO055_EUL_Heading_LSB) / 16.0;
   gyro_pitch_input = readRegister16(BNO055_EUL_Roll_LSB) / 16.0;
   gyro_roll_input = readRegister16(BNO055_EUL_Pitch_LSB) / 16.0;
-
+  //gyro_roll_input = gyro_roll_input-3.19;
+  //gyro_pitch_input = gyro_pitch_input +0.94;
 }
 
 int16_t readRegister16(uint8_t reg) {
@@ -284,21 +329,16 @@ int16_t readRegister16(uint8_t reg) {
   return value;
 }
 
-
 float bound(float x, float x_min, float x_max) {
   if (x < x_min) { x = x_min; }
   if (x > x_max) { x = x_max; }
   return x;
 }
+ 
+void calibracion(){
+  LeerBNO();
+  desfase_pitch = gyro_pitch_input;
+  desfase_roll = gyro_roll_input;
+  desfase_yaw = gyro_yaw_input;
 
-float percentage(float x) {
-  float percentage = (x - 1000) / 10;
-  return percentage;
-}
-float limit_PWM(float output) {
-  if (output > 1600) output = 1600;
-  else if (output < 1100) {
-    output = 1100;
-  }
-  return output;
 }
