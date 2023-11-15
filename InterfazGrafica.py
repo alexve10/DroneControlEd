@@ -5,9 +5,14 @@ from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
 from PyQt5.QtCore import QIODevice, Qt, QSize
 from PyQt5.QtGui import QPixmap, QIcon
 
+from datetime import datetime
+
 import pyqtgraph as pg
 import numpy as np
 import sys
+import csv
+import time
+
 
 class MyApp(QMainWindow):
 
@@ -19,8 +24,9 @@ class MyApp(QMainWindow):
         self.Imgfondo = QPixmap('FondoInterfazV5.png')
         self.Imgfondo = self.Imgfondo.scaled(self.Fondo.size(), aspectRatioMode=Qt.KeepAspectRatio)
         self.Fondo.setPixmap(self.Imgfondo)
+        self.tiempo_inicial = time.time()
 
-        #Inserción de Imagenes
+        # Inserción de Imagenes
         self.Image1 = QPixmap('1.png')
         self.Image2 = QPixmap('2.png')
         self.Image3 = QPixmap('3.png')
@@ -45,7 +51,7 @@ class MyApp(QMainWindow):
         self.Punto6.setPixmap(self.Image6)
         self.Punto7.setPixmap(self.Image7)
 
-        #Seleccion de Control
+        # Seleccion de Control
         self.Control_Menu.currentIndexChanged.connect(self.CambioControl)
         self.Control_Menu.addItem("Control Proporcional, Integral & Derivativo (PID)")
         self.Control_Menu.addItem("Control Regulador Lineal Cuadrático (LQR)")
@@ -85,6 +91,7 @@ class MyApp(QMainWindow):
         self.Val_R_Set = 0.0
         self.Val_P_Set = 0.0
         self.Val_Y_Set = 0.0
+        self.Val_Porcentaje = 0.0
 
         self.R_Kp.valueChanged.connect(self.valor_cambiado)
         self.P_Kp.valueChanged.connect(self.valor_cambiado)
@@ -98,29 +105,30 @@ class MyApp(QMainWindow):
         self.R_Set.valueChanged.connect(self.valor_cambiado)
         self.P_Set.valueChanged.connect(self.valor_cambiado)
         self.Y_Set.valueChanged.connect(self.valor_cambiado)
+        self.Porcentaje.valueChanged.connect(self.valor_cambiado)
 
         # Botones Generales
         # Botón "Guardar"
-        self.setup_button(self.Guardar, "Guardar1.png", "Guardar2.png", "Guardar3.png", 208,40)
+        self.setup_button(self.Guardar, "Guardar1.png", "Guardar2.png", "Guardar3.png", 208, 40)
 
         # Botón "Reset"
-        self.setup_button(self.Reset, "Reset1.png", "Reset2.png", "Reset3.png",208,42)
+        self.setup_button(self.Reset, "Reset1.png", "Reset2.png", "Reset3.png", 208, 42)
 
         # Botón "Calibración"
-        self.setup_button(self.Calibrar, "Calibrar1.png", "Calibrar2.png", "Calibrar3.png",208,42)
+        self.setup_button(self.Calibrar, "Calibrar1.png", "Calibrar2.png", "Calibrar3.png", 208, 42)
 
         self.Guardar.clicked.connect(self.guardar_valores)
         self.Reset.clicked.connect(self.reset_valores)
-        #self.Calibrar.clicked.connect(self.calibrar_sensor)
+        # self.Calibrar.clicked.connect(self.calibrar_sensor)
 
         # Control Connect
-        self.setup_button(self.Actualizar, "Actualizar1.png", "Actualizar2.png", "Actualizar3.png",209,23)
+        self.setup_button(self.Actualizar, "Actualizar1.png", "Actualizar2.png", "Actualizar3.png", 209, 23)
 
         # Botón "Reset"
-        self.setup_button(self.Conectar, "Conectar1.png", "Conectar2.png", "Conectar3.png",209,23)
+        self.setup_button(self.Conectar, "Conectar1.png", "Conectar2.png", "Conectar3.png", 209, 23)
 
         # Botón "Calibración"
-        self.setup_button(self.Desconectar, "Desconectar1.png", "Desconectar2.png", "Desconectar3.png",209,23)
+        self.setup_button(self.Desconectar, "Desconectar1.png", "Desconectar2.png", "Desconectar3.png", 209, 23)
 
         self.serial = QSerialPort()
         self.Actualizar.clicked.connect(self.read_ports)
@@ -197,6 +205,7 @@ class MyApp(QMainWindow):
 
     def clicked_button(self, button, clicked_image):
         button.setIcon(QIcon(clicked_image))
+
     def guardar_valores(self):
         print("Valor de Kp Roll:", self.Val_R_Kp)
         print("Valor de Kp Pitch:", self.Val_P_Kp)
@@ -210,14 +219,17 @@ class MyApp(QMainWindow):
         print("Valor de Setpoint Roll:", self.Val_R_Set)
         print("Valor de Setpoint Pitch:", self.Val_P_Set)
         print("Valor de Setpoint Yaw:", self.Val_Y_Set)
+        print("Valor de Porcentaje:", self.Val_Porcentaje)
 
         self.flag_EnviarDatos = "2"
         self.send_data()
+
     def reset_valores(self):
         Val_R_Kp, Val_P_Kp, Val_Y_Kp = 0.0, 0.0, 0.0
         Val_R_Ki, Val_P_Ki, Val_Y_Ki = 0.0, 0.0, 0.0
         Val_R_Kd, Val_P_Kd, Val_Y_Kd = 0.0, 0.0, 0.0
         Val_R_Set, Val_P_Set, Val_Y_Set = 0.0, 0.0, 0.0
+        Val_Porcentaje = 0.0
 
         self.R_Kp.setValue(Val_R_Kp)
         self.P_Kp.setValue(Val_P_Kp)
@@ -231,8 +243,9 @@ class MyApp(QMainWindow):
         self.R_Set.setValue(Val_R_Set)
         self.P_Set.setValue(Val_P_Set)
         self.Y_Set.setValue(Val_Y_Set)
+        self.Porcentaje.setValue(Val_Porcentaje)
 
-    def valor_cambiado(self,value):
+    def valor_cambiado(self, value):
         if self.sender() == self.R_Kp:
             self.Val_R_Kp = value
         if self.sender() == self.P_Kp:
@@ -255,9 +268,10 @@ class MyApp(QMainWindow):
             self.Val_R_Set = value
         if self.sender() == self.P_Set:
             self.Val_P_Set = value
-        elif self.sender() == self.Y_Set:
+        if self.sender() == self.Y_Set:
             self.Val_Y_Set = value
-
+        elif self.sender() == self.Porcentaje:
+            self.Val_Porcentaje = value
     def check_toggle(self):
         if self.R_Check.isChecked():
             self.flag_check_R = "1"
@@ -293,6 +307,7 @@ class MyApp(QMainWindow):
             self.flag_check_LC4 = "1"
         else:
             self.flag_check_LC4 = "0"
+
     def read_ports(self):
         self.baudrates = ['1200', '2400', '4800', '9600',
                           '19200', '38400', '115200']
@@ -345,7 +360,7 @@ class MyApp(QMainWindow):
         plot_colors = ['#da0037', '#FF5733', '#BC970B', '#28A70E', '#109772', '#106697', '#4F1097']
         plots = []
 
-        if self.flag_graf == "1":
+        if (self.flag_graf == "1"):
             self.y1 = self.y1[1:]
             self.y1.append(y1)  # Graficar el 1 valor
             self.y2 = self.y2[1:]
@@ -375,8 +390,29 @@ class MyApp(QMainWindow):
             if not plots:
                 self.plt.clear()
 
+            self.guardar_csv()
+
         self.PWM_motores()
         self.actualizar_valores()
+
+    def guardar_csv(self):
+        if (self.flag_graf == "1"):
+            with open('data.csv', 'a', newline='') as csvfile:
+                # Create a CSV writer object
+                writer = csv.writer(csvfile)
+
+                # timestamp = datetime.now().strftime('%M:%S.%f')
+                # timestamp = round(time.time(), 3)
+                # Obtener el tiempo transcurrido desde el tiempo inicial con tres decimales
+                tiempo_transcurrido = round(time.time() - self.tiempo_inicial, 3)
+
+                # Convertir el tiempo transcurrido a minutos y segundos
+                minutos, segundos = divmod(tiempo_transcurrido, 60)
+
+                # Escribir los datos en el archivo CSV como una nueva fila
+                writer.writerow(
+                    ["{:02}:{:06.3f}".format(int(minutos), segundos), self.Roll_Med, self.Pitch_Med, self.Yaw_Med,
+                     self.M1_Med, self.M2_Med, self.M3_Med, self.M4_Med])
 
     def iniciar_grafica(self):
         self.flag_graf = "1"
@@ -384,19 +420,17 @@ class MyApp(QMainWindow):
     def parar_grafica(self):
         self.flag_graf = "0"
 
-    def guardar_csv(self):
-        if (self.flag_graf = "1"):
-
-        if (self.flag_graf = "0"):
-
     def send_data(self):
-        if(self.flag_EnviarDatos == "1"):
-            #Para enviar solo acelerador
+        if (self.flag_EnviarDatos == "1"):
+            # Para enviar solo acelerador
             data = str(self.flag_EnviarDatos) + "," + str(self.acc)
 
-        if(self.flag_EnviarDatos == "2"):
-            #Para enviar valores de ganancias
-            data = (str(self.flag_EnviarDatos) + "," + str(self.Val_R_Kp) + "," + str(self.Val_R_Ki) + "," + str(self.Val_R_Kd) + "," + str(self.Val_P_Kp) + "," + str(self.Val_P_Ki) + "," + str(self.Val_P_Kd) + "," + str(self.Val_Y_Kp) + "," + str(self.Val_Y_Ki) + "," + str(self.Val_Y_Kd) + "," + str(self.Val_R_Set) + "," + str(self.Val_P_Set) + "," + str(self.Val_Y_Set))
+        if (self.flag_EnviarDatos == "2"):
+            # Para enviar valores de ganancias
+            data = (str(self.flag_EnviarDatos) + "," + str(self.Val_R_Kp) + "," + str(self.Val_R_Ki) + "," + str(
+                self.Val_R_Kd) + "," + str(self.Val_P_Kp) + "," + str(self.Val_P_Ki) + "," + str(
+                self.Val_P_Kd) + "," + str(self.Val_Y_Kp) + "," + str(self.Val_Y_Ki) + "," + str(
+                self.Val_Y_Kd) + "," + str(self.Val_R_Set) + "," + str(self.Val_P_Set) + "," + str(self.Val_Y_Set) + "," + str(self.Val_Porcentaje))
 
         data = data + "\n"
         print(data)
@@ -459,6 +493,7 @@ class MyApp(QMainWindow):
             self.Ki.setText("K1")
             self.Kd.setText("K2")
             self.flag_ControlMenu = "2"
+
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
