@@ -24,7 +24,6 @@ class MyApp(QMainWindow):
         self.Imgfondo = QPixmap('FondoInterfazV5.png')
         self.Imgfondo = self.Imgfondo.scaled(self.Fondo.size(), aspectRatioMode=Qt.KeepAspectRatio)
         self.Fondo.setPixmap(self.Imgfondo)
-        self.tiempo_inicial = time.time()
 
         # Inserción de Imagenes
         self.Image1 = QPixmap('1.png')
@@ -56,6 +55,8 @@ class MyApp(QMainWindow):
         self.Control_Menu.addItem("Control Proporcional, Integral & Derivativo (PID)")
         self.Control_Menu.addItem("Control Regulador Lineal Cuadrático (LQR)")
 
+        self.nombre_archivo = None
+        self.tiempo_inicial = None
         self.flag_graf = "0"
         self.flag_csv = "0"
         self.flag_check_R = "0"
@@ -396,29 +397,41 @@ class MyApp(QMainWindow):
         self.actualizar_valores()
 
     def guardar_csv(self):
-        if (self.flag_graf == "1"):
-            with open('data.csv', 'a', newline='') as csvfile:
-                # Create a CSV writer object
-                writer = csv.writer(csvfile)
+        if self.flag_graf == "1":
+            # Verificar si es la primera vez que se guarda en el CSV
+            if self.tiempo_inicial is None:
+                self.tiempo_inicial = time.time()  # Guardar el tiempo inicial
+                print(self.tiempo_inicial)
+                # Crear un nombre único para el archivo CSV con la fecha y hora de inicio
+                self.nombre_archivo = "data_{}.csv".format(datetime.now().strftime('%Y%m%d_%H%M%S'))
+                print(self.nombre_archivo)
 
-                # timestamp = datetime.now().strftime('%M:%S.%f')
-                # timestamp = round(time.time(), 3)
+            # Asegurarse de que self.nombre_archivo no sea None antes de abrir el archivo
+            if self.nombre_archivo is not None:
                 # Obtener el tiempo transcurrido desde el tiempo inicial con tres decimales
                 tiempo_transcurrido = round(time.time() - self.tiempo_inicial, 3)
 
                 # Convertir el tiempo transcurrido a minutos y segundos
                 minutos, segundos = divmod(tiempo_transcurrido, 60)
 
-                # Escribir los datos en el archivo CSV como una nueva fila
-                writer.writerow(
-                    ["{:02}:{:06.3f}".format(int(minutos), segundos), self.Roll_Med, self.Pitch_Med, self.Yaw_Med,
-                     self.M1_Med, self.M2_Med, self.M3_Med, self.M4_Med])
+                with open(self.nombre_archivo, 'a', newline='') as csvfile:
+                    # Crear un objeto escritor CSV
+                    writer = csv.writer(csvfile)
+
+                    # Escribir los datos en el archivo CSV como una nueva fila
+                    writer.writerow(["{:02}:{:06.3f}".format(int(minutos), segundos),
+                                     self.Roll_Med, self.Pitch_Med, self.Yaw_Med,
+                                     self.M1_Med, self.M2_Med, self.M3_Med, self.M4_Med])
 
     def iniciar_grafica(self):
         self.flag_graf = "1"
+        # Si ya se ha iniciado, mantener el nombre del archivo existente
+
 
     def parar_grafica(self):
         self.flag_graf = "0"
+        self.tiempo_inicial = None  # Reiniciar el tiempo al desactivar la flag
+        self.nombre_archivo = None  # Reiniciar el nombre delu archivo
 
     def send_data(self):
         if (self.flag_EnviarDatos == "1"):
