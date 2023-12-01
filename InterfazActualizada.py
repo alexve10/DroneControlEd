@@ -2,7 +2,7 @@
 from PyQt5.QtWidgets import QMainWindow, QApplication, QVBoxLayout, QWidget, QPushButton, QDialog, QLabel
 from PyQt5.uic import loadUi
 from PyQt5.QtSerialPort import QSerialPort, QSerialPortInfo
-from PyQt5.QtCore import QIODevice, Qt, QSize, QThread, pyqtSignal
+from PyQt5.QtCore import QIODevice, Qt, QSize, pyqtSignal, QTimer, QTime
 from PyQt5.QtGui import QPixmap, QIcon
 from collections import deque
 
@@ -34,6 +34,12 @@ class MyApp(QMainWindow):
         self.Drone = self.Drone.scaled(self.DroneImagen.size(), aspectRatioMode=Qt.KeepAspectRatio)
         self.DroneImagen.setPixmap(self.Drone)
 
+        # Setpoint Imagen
+        self.IconoSetpoint = QPixmap('Pulsos.png')
+        self.IconoSetpoint = self.IconoSetpoint.scaled(QSize(51,22))
+        self.BotonTipoSetpoint.setIcon(QIcon(self.IconoSetpoint))
+        self.BotonTipoSetpoint.setIconSize(QSize(51,22))
+
         # Seleccion de Control
         self.Control_Menu.currentIndexChanged.connect(self.CambioControl)
         self.Control_Menu.addItem("Control Proporcional, Integral & Derivativo (PID)")
@@ -43,6 +49,7 @@ class MyApp(QMainWindow):
         self.nombre_archivo = None
         self.tiempo_inicial = None
         self.flag_graf = "0"
+        self.flag_Set = "0"
         self.flag_csv = "0"
         self.flag_check_R_Med = "0"
         self.flag_check_P_Med = "0"
@@ -56,7 +63,7 @@ class MyApp(QMainWindow):
         self.flag_check_LC4 = "0"
         self.flag_ControlMenu = "0"
         self.flag_EnviarDatos = "0"
-        self.flag_TipoSetpoint = "0"
+        self.flag_TipoSetpoint = False
 
         # Variables Medidas
         self.Roll_Med = 0
@@ -83,10 +90,15 @@ class MyApp(QMainWindow):
         self.Val_R_Set = 0.0
         self.Val_P_Set = 0.0
         self.Val_Y_Set = 0.0
+        self.Val_R_Set_Last = 0.0
+        self.Val_P_Set_Last = 0.0
+        self.Val_Y_Set_Last = 0.0
         self.Val_R_Periodo = 0.0
         self.Val_P_Periodo = 0.0
         self.Val_Y_Periodo = 0.0
-
+        self.Val_R_Amp = 0.0
+        self.Val_P_Amp = 0.0
+        self.Val_Y_Amp = 0.0
         self.Val_Porcentaje = 0.8
 
         self.R_Kp.valueChanged.connect(self.valor_cambiado)
@@ -141,6 +153,12 @@ class MyApp(QMainWindow):
         self.R_Periodo.hide()
         self.P_Periodo.hide()
         self.Y_Periodo.hide()
+        self.timer_pulsos_R = QTimer(self)
+        self.timer_pulsos_P = QTimer(self)
+        self.timer_pulsos_Y = QTimer(self)
+        self.timer_pulsos_R.timeout.connect(self.generarPulso_R)
+        self.timer_pulsos_P.timeout.connect(self.generarPulso_P)
+        #self.timer_pulsos_Y.timeout.connect(self.generarPulso)
 
         self.serial.readyRead.connect(self.read_data)
         # self.Acelerador.valueChanged.connect(self.accelerator_pwm)
@@ -188,22 +206,29 @@ class MyApp(QMainWindow):
     def generar_trendepulsos(self):
         self.flag_TipoSetpoint = not self.flag_TipoSetpoint
 
-        if self.flag_TipoSetpoint:
-            self.Periodo.hide()
-            self.R_Periodo.hide()
-            self.P_Periodo.hide()
-            self.Y_Periodo.hide()
-            print("Pulsos mode")
-            self.BotonTipoSetpoint.setText("Pulsos")
-            self.Setpoint.setText("Setpoint")
-        else:
+        if self.flag_TipoSetpoint == True:
             self.Periodo.show()
             self.R_Periodo.show()
             self.P_Periodo.show()
             self.Y_Periodo.show()
-            print("Setpoints mode")
-            self.BotonTipoSetpoint.setText("Setpoints")
+            #self.BotonTipoSetpoint.setText("Setpoints")
             self.Setpoint.setText("Amplitud")
+            self.IconoSetpoint = QPixmap('Setpoint.png')
+            self.IconoSetpoint = self.IconoSetpoint.scaled(QSize(51, 22))
+            self.BotonTipoSetpoint.setIcon(QIcon(self.IconoSetpoint))
+            self.BotonTipoSetpoint.setIconSize(QSize(51, 22))
+
+        else:
+            self.Periodo.hide()
+            self.R_Periodo.hide()
+            self.P_Periodo.hide()
+            self.Y_Periodo.hide()
+            #self.BotonTipoSetpoint.setText("Pulsos")
+            self.Setpoint.setText("Setpoint")
+            self.IconoSetpoint = QPixmap('Pulsos.png')
+            self.IconoSetpoint = self.IconoSetpoint.scaled(QSize(51, 22))
+            self.BotonTipoSetpoint.setIcon(QIcon(self.IconoSetpoint))
+            self.BotonTipoSetpoint.setIconSize(QSize(51, 22))
 
     def tiempo_valor(self):
         nuevo_val_tiempo = int(self.MaxTiempo.text())
@@ -255,7 +280,6 @@ class MyApp(QMainWindow):
         button.setIcon(QIcon(clicked_image))
 
     def guardar_valores(self):
-
         print("Valor de Kp Roll:", self.Val_R_Kp)
         print("Valor de Kp Pitch:", self.Val_P_Kp)
         print("Valor de Kp Yaw:", self.Val_Y_Kp)
@@ -273,6 +297,74 @@ class MyApp(QMainWindow):
         self.flag_EnviarDatos = "2"
         self.send_data()
 
+        if (self.flag_TipoSetpoint == True):
+            self.StartPulseTrain_R()
+            self.StartPulseTrain_P()
+            self.StartPulseTrain_Y()
+        else:
+            self.StopPulseTrain_R()
+            self.StopPulseTrain_P()
+            self.StopPulseTrain_Y()
+            print("No pulso")
+
+        self.Val_R_Set_Last = self.Val_R_Set
+        self.Val_P_Set_Last = self.Val_P_Set
+        self.Val_Y_Set_Last = self.Val_Y_Set
+
+    def StartPulseTrain_R(self):
+        tiempo_R = (self.Val_R_Periodo*1000)/2
+        self.timer_pulsos_R.start(int(tiempo_R))
+
+    def StopPulseTrain_R(self):
+        self.timer_pulsos_R.stop()
+
+    def StartPulseTrain_P(self):
+        tiempo_P = (self.Val_P_Periodo*1000)/2
+        self.timer_pulsos_P.start(int(tiempo_P))
+
+    def StopPulseTrain_P(self):
+        self.timer_pulsos_P.stop()
+
+    def StartPulseTrain_Y(self):
+        tiempo_Y = (self.Val_Y_Periodo*1000)/2
+        self.timer_pulsos_Y.start(int(tiempo_Y))
+
+    def StopPulseTrain_Y(self):
+        self.timer_pulsos_Y.stop()
+
+    def generarPulso_R(self):
+        if (self.Val_R_Periodo != 0):
+            if (self.Val_R_Set != 0.0):
+                self.Val_R_Set = 0.0
+                self.Val_R_Set_Last = self.Val_R_Set
+            else:
+                self.Val_R_Set = self.Val_R_Amp
+                self.Val_R_Set_Last = self.Val_R_Set
+
+            self.flag_EnviarDatos = "2"
+            self.send_data()
+
+    def generarPulso_P(self):
+        if (self.Val_P_Periodo != 0):
+            if (self.Val_P_Set != 0.0):
+                self.Val_P_Set = 0.0
+                self.Val_P_Set_Last = self.Val_P_Set
+            else:
+                self.Val_P_Set = self.Val_P_Amp
+                self.Val_P_Set_Last = self.Val_P_Set
+            self.flag_EnviarDatos = "2"
+            self.send_data()
+
+    def generarPulso_Y(self):
+        if (self.Val_Y_Periodo != 0):
+            if (self.Val_Y_Set != 0.0):
+                self.Val_Y_Set = 0.0
+                self.Val_Y_Set_Last = self.Val_Y_Set
+            else:
+                self.Val_Y_Set = self.Val_Y_Amp
+                self.Val_Y_Set_Last = self.Val_Y_Set
+            self.flag_EnviarDatos = "2"
+            self.send_data()
 
     def reset_valores(self):
         Val_R_Kp, Val_P_Kp, Val_Y_Kp = 0.0, 0.0, 0.0
@@ -320,8 +412,20 @@ class MyApp(QMainWindow):
             self.Val_P_Set = value
         if self.sender() == self.Y_Set:
             self.Val_Y_Set = value
-        elif self.sender() == self.Porcentaje:
-            self.Val_Porcentaje = value
+
+        if (self.flag_TipoSetpoint == True):
+            if self.sender() == self.R_Periodo:
+                self.Val_R_Periodo = value
+            if self.sender() == self.P_Periodo:
+                self.Val_P_Periodo = value
+            if self.sender() == self.Y_Periodo:
+                self.Val_Y_Periodo = value
+            if self.sender() == self.R_Set:
+                self.Val_R_Amp = value
+            if self.sender() == self.P_Set:
+                self.Val_P_Amp = value
+            if self.sender() == self.Y_Set:
+                self.Val_Y_Amp = value
     def check_toggle(self):
         if self.R_Check_Med.isChecked():
             self.flag_check_R_Med = "1"
@@ -440,11 +544,13 @@ class MyApp(QMainWindow):
             self.y7 = self.y7[1:]
             self.y7.append(y7)  # Graficar el 4 valor
             self.y8 = self.y8[1:]
-            self.y8.append(self.Val_R_Set)  # Graficar el 4 valor
+
+            self.y8.append(self.Val_R_Set_Last)  # Graficar el 4 valor
             self.y9 = self.y9[1:]
-            self.y9.append(self.Val_P_Set)  # Graficar el 4 valor
+            self.y9.append(self.Val_P_Set_Last)  # Graficar el 4 valor
             self.y10 = self.y10[1:]
-            self.y10.append(self.Val_Y_Set)  # Graficar el 4 valor
+            self.y10.append(self.Val_Y_Set_Last)  # Graficar el 4 valor
+
 
             self.y_values = [self.y1, self.y2, self.y3, self.y4, self.y5, self.y6, self.y7, self.y8, self.y9, self.y10]
             checkbox_flags = [self.flag_check_R_Med, self.flag_check_P_Med, self.flag_check_Y_Med, self.flag_check_LC1,
@@ -515,7 +621,8 @@ class MyApp(QMainWindow):
             data = (str(self.flag_EnviarDatos) + "," + str(self.Val_R_Kp) + "," + str(self.Val_R_Ki) + "," + str(
                 self.Val_R_Kd) + "," + str(self.Val_P_Kp) + "," + str(self.Val_P_Ki) + "," + str(
                 self.Val_P_Kd) + "," + str(self.Val_Y_Kp) + "," + str(self.Val_Y_Ki) + "," + str(
-                self.Val_Y_Kd) + "," + str(self.Val_R_Set) + "," + str(self.Val_P_Set) + "," + str(self.Val_Y_Set) + "," + str(self.Val_Porcentaje))
+                self.Val_Y_Kd) + "," + str(self.Val_R_Set) + "," + str(self.Val_P_Set) + "," + str(
+                self.Val_Y_Set) + "," + str(self.Val_Porcentaje))
 
         data = data + "\n"
         print(data)
@@ -540,6 +647,9 @@ class MyApp(QMainWindow):
         self.M2.setValue(int(Val_PWM_M2))
         self.M3.setValue(int(Val_PWM_M3))
         self.M4.setValue(int(Val_PWM_M4))
+
+        Val_Battery = 99
+        self.BatteryBar.setValue(Val_Battery)
 
     def actualizar_valores(self):
         Roll_Medido = str(self.Roll_Med)
